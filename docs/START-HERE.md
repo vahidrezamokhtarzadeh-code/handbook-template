@@ -10,9 +10,11 @@ Reading only *what* was decided is not enough; the *why* is part of the architec
 2. `PROJECT-NARRATIVE.md` — the causal story behind the architecture's shape.
 3. `DECISION-TRACE.md` — evidence/story → decision → why → deliberately-not-built.
 4. `CONTEXT-COVERAGE.md` — which conversation discoveries are preserved and where.
-5. `project/runbooks/new-chat-continuation.md` — how to continue work.
-6. `SOURCE-HANDOFF.md` and repository-root `IMPLEMENTATION-STATUS.md` if source accompanies the handbook.
-7. The ADR relevant to whatever you are about to change.
+5. `project/runbooks/handbook-fill-plan.md` — what the handbook needs next and how it gets filled.
+6. `project/runbooks/fill-handbook-stages.md` — staged prompts for filling the handbook (or `fill-handbook-stages-fresh.md` for a fresh project).
+7. `project/runbooks/new-chat-continuation.md` — how to continue work.
+8. `SOURCE-HANDOFF.md` and repository-root `IMPLEMENTATION-STATUS.md` if source accompanies the handbook.
+9. The ADR relevant to whatever you are about to change.
 
 ## Before implementing, also read
 

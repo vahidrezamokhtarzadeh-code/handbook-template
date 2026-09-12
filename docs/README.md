@@ -37,6 +37,9 @@ a mining package and a fill plan.
 Modes:
 - `--existing` — existing project, mid-development (**implemented**).
 - `--fresh` — fresh / new / near-empty project (**implemented**).
+   This mode is discovery-first. It prepares the handbook so an agent can ask targeted questions,
+   draft a short discovery brief and a first-slice candidate, and then wait for product-owner
+   confirmation before implementation.
 - `--new` — deprecated; use `--fresh` instead.
 
 Run `node bootstrap-handbook.mjs --help` for all options.

@@ -395,7 +395,7 @@ function projectNarrative() {
 `;
 }
 
-function startHere(project, version) {
+function startHere(project, version, mode) {
   return `# START HERE — ${project} Handbook ${version}
 
 This file is written for a new Chat/Tool/Engineer continuing this project.
@@ -429,8 +429,7 @@ Reading only *what* was decided is not enough; the *why* is part of the architec
 
 ## Current status of work
 
-Phase: existing project, mid-development — handbook is being bootstrapped; decisions made before
-this snapshot still need to be captured into \`DECISION-TRACE.md\`, \`PROJECT-NARRATIVE.md\`, and ADRs.
+Phase: ${modeLabel(mode)} — handbook is being bootstrapped; next step depends on the project's starting point.
 
 Current next action: <one sentence>
 
@@ -440,7 +439,7 @@ This handbook is snapshotted after each meaningful design block. Current version
 `;
 }
 
-function changelog(project, version, date) {
+function changelog(project, version, date, mode) {
   return `# Changelog
 
 Handbook + implementation snapshots, newest first. Snapshot after every meaningful design block.
@@ -448,7 +447,7 @@ Handbook + implementation snapshots, newest first. Snapshot after every meaningf
 ## ${version} — ${date}
 
 ### Added
-- Bootstrapped the architecture handbook for ${project} (existing project, mid-development).
+- Bootstrapped the architecture handbook for ${project} (${modeLabel(mode)}).
 - Handoff surface: AGENTS.md, START-HERE.md, EXECUTABLE-DESIGN-INDEX.md, SOURCE-HANDOFF.md.
 - Truth + causal memory: LATEST-STATE.md, PROJECT-NARRATIVE.md, DECISION-TRACE.md, CONTEXT-COVERAGE.md.
 - project/ body templates (stories, decisions, domain, architecture, technology, data-model, contracts, open-decisions, implementation, runbooks) and architect-journal/.
@@ -609,7 +608,7 @@ function miningPackagePath(target) {
   return path.join(target, "docs", "project", "runbooks", "mining-package.json");
 }
 
-function writeMiningPackage(target, project, version, date, inspection) {
+function writeMiningPackage(target, project, version, date, inspection, mode) {
   const pkg = {
     handbookVersion: version,
     snapshotDate: date,
@@ -700,6 +699,7 @@ function writeMiningPackage(target, project, version, date, inspection) {
       },
     },
     projectTypeHint: inspection.seemsBookProject ? "possible-book-project" : inspection.seemsCodeRepo ? "likely-code-project" : "unrecognized",
+    bootstrapMode: mode,
   };
   return pkg;
 }
@@ -765,7 +765,7 @@ ${inspectionSummary(inspection)}
 
 ## Stage plan
 
-See \`docs/project/runbooks/fill-handbook-stages.md\` for the staged prompts.
+${stagePlanNote(mode)}
 
 ## Current handbook state
 
@@ -775,6 +775,34 @@ See \`docs/project/runbooks/fill-handbook-stages.md\` for the staged prompts.
 - First numbered artifacts: left for the agent fill stage
 - Practical next action: run the fill pipeline, then review the summary it writes
 `;
+}
+
+function stagePlanNote(mode) {
+  if (mode === "fresh") {
+    return `For a fresh / near-empty project, use the fresh-mode staged prompts:
+
+  docs/project/runbooks/fill-handbook-stages-fresh.md
+
+Fresh mode is discovery-first. The agent should:
+- read what exists,
+- write a short "what I see so far" note,
+- ask targeted questions,
+- draft a discovery brief,
+- draft a first-slice candidate,
+- hand off for product-owner confirmation,
+- then convert confirmation into the handbook.
+
+Do not fill the whole handbook before there is enough to start.
+Do not invent Accepted decisions.
+Do not propose scope the product owner has not confirmed.`;
+  }
+  return `Use the staged prompts in:
+
+  docs/project/runbooks/fill-handbook-stages.md
+
+Work through the stages in order.
+Do not skip a stage; later stages depend on earlier ones.
+Do not invent Accepted decisions.`;
 }
 
 function inspectionSummary(inspection) {
@@ -799,6 +827,12 @@ function indentLines(lines) {
 function inspectScripts(scripts) {
   if (!scripts || !scripts.length) return "none detected";
   return scripts.slice(0, 12).join(", ") + (scripts.length > 12 ? ", ..." : "");
+}
+
+function modeLabel(mode) {
+  if (mode === "fresh") return "fresh / start-from-scratch";
+  if (mode === "existing") return "existing project, mid-development";
+  return "existing project";
 }
 
 // ---------------------------------------------------------------------------
@@ -827,14 +861,14 @@ function stampTarget(target, project, version, date) {
   stampPlaceholders(target, project, version, date);
 }
 
-function generateCoreFilesFor(target, project, version, date) {
+function generateCoreFilesFor(target, project, version, date, mode) {
   const docsDir = path.join(target, "docs");
   if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
   fs.writeFileSync(path.join(docsDir, "LATEST-STATE.md"), latestState(project), "utf8");
   fs.writeFileSync(path.join(docsDir, "DECISION-TRACE.md"), decisionTrace(), "utf8");
   fs.writeFileSync(path.join(docsDir, "PROJECT-NARRATIVE.md"), projectNarrative(), "utf8");
-  fs.writeFileSync(path.join(docsDir, "START-HERE.md"), startHere(project, version), "utf8");
-  fs.writeFileSync(path.join(docsDir, "CHANGELOG.md"), changelog(project, version, date), "utf8");
+  fs.writeFileSync(path.join(docsDir, "START-HERE.md"), startHere(project, version, mode), "utf8");
+  fs.writeFileSync(path.join(docsDir, "CHANGELOG.md"), changelog(project, version, date, mode), "utf8");
 }
 
 function writeOrientationStub(target, project, version) {
@@ -925,13 +959,13 @@ function bootstrapExisting(args) {
   copyTemplateIfFresh(source, target);
   ensureAgentsMd(source, target);
   stampTarget(target, args.project, args.version, args.date);
-  generateCoreFilesFor(target, args.project, args.version, args.date);
+  generateCoreFilesFor(target, args.project, args.version, args.date, args.mode);
   writeOrientationStub(target, args.project, args.version);
 
   // Re-inspect after copy so the mining package reflects the actual tree the agent will see.
   // For project-type detection, exclude the handbook tree so the template does not contaminate the result.
   const postInspection = inspectTarget(target, { excludeHandbook: true });
-  const pkg = writeMiningPackage(target, args.project, args.version, args.date, postInspection);
+  const pkg = writeMiningPackage(target, args.project, args.version, args.date, postInspection, args.mode);
   fs.mkdirSync(path.dirname(miningPackagePath(target)), { recursive: true });
   fs.writeFileSync(miningPackagePath(target), JSON.stringify(pkg, null, 2) + "\n", "utf8");
 
@@ -972,13 +1006,14 @@ function bootstrapFresh(args) {
   ensureAgentsMd(source, target);
 
   stampTarget(target, args.project, args.version, args.date);
-  generateCoreFilesFor(target, args.project, args.version, args.date);
+  generateCoreFilesFor(target, args.project, args.version, args.date, args.mode);
   writeOrientationStub(target, args.project, args.version);
+  if (args.mode === "fresh") ensureDiscoveryFolder(target);
 
   // Re-inspect after copy so the mining package reflects the actual tree the agent will see.
   // For project-type detection, exclude the handbook tree so the template does not contaminate the result.
   const postInspection = inspectTarget(target, { excludeHandbook: true });
-  const pkg = writeMiningPackage(target, args.project, args.version, args.date, postInspection);
+  const pkg = writeMiningPackage(target, args.project, args.version, args.date, postInspection, args.mode);
   fs.mkdirSync(path.dirname(miningPackagePath(target)), { recursive: true });
   fs.writeFileSync(miningPackagePath(target), JSON.stringify(pkg, null, 2) + "\n", "utf8");
 
@@ -989,6 +1024,17 @@ function bootstrapFresh(args) {
   printCreated(args.project, args.version, args.date);
   printAgentNextSteps(args.project);
   printFreshReviewNotes(args.project);
+}
+
+function ensureDiscoveryFolder(target) {
+  const discoveryDir = path.join(target, "docs", "project", "discovery");
+  if (!fs.existsSync(discoveryDir)) {
+    fs.mkdirSync(discoveryDir, { recursive: true });
+  }
+  const briefTemplate = path.join(discoveryDir, "_TEMPLATE-discovery-brief.md");
+  const sliceTemplate = path.join(discoveryDir, "_TEMPLATE-first-slice-candidate.md");
+  // Templates live in the repo; they are already copied by copyTemplate.
+  // This function is defensive: it ensures the folder exists if the copy did not create it.
 }
 
 function validateTarget(source, target) {

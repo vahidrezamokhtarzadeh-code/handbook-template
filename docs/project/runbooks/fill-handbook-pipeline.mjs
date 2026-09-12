@@ -198,6 +198,8 @@ function buildPromptPackage(ctx) {
     files: v,
   }));
 
+  const isFresh = mp?.bootstrapMode === "fresh";
+
   const packageBody = {
     generatedBy: SCRIPT_NAME,
     generatedAt: today(),
@@ -206,6 +208,8 @@ function buildPromptPackage(ctx) {
     handbookVersion: version,
     snapshotDate: date,
     projectTypeHint,
+    bootstrapMode: mp?.bootstrapMode || null,
+    isFresh,
     fillPlanAvailable: Boolean(ctx.fillPlan),
     compassAvailable: Boolean(ctx.compass),
     startHereAvailable: Boolean(ctx.startHere),
@@ -243,6 +247,17 @@ function buildPromptPackage(ctx) {
         "Open Decision — known unresolved question intentionally deferred.",
         "Explicitly-not-modeled — concept deliberately not created.",
       ],
+      freshModeRules: isFresh
+        ? [
+            "This is a fresh / near-empty project.",
+            "Discovery comes before doc completion.",
+            "Do not fill the whole handbook before there is enough to start.",
+            "Ask targeted questions before drafting the discovery brief.",
+            "Draft a discovery brief and a first-slice candidate.",
+            "Hand off to the product owner before implementation.",
+            "Do not propose scope the product owner has not confirmed.",
+          ]
+        : [],
     },
   };
 
@@ -254,6 +269,13 @@ function buildStagedPrompts(ctx, pkg) {
   const version = pkg.handbookVersion;
   const date = pkg.snapshotDate;
   const projectTypeHint = pkg.projectTypeHint;
+  const isFresh = pkg.isFresh;
+
+  const freshStageFiles = [
+    "docs/project/discovery/_TEMPLATE-discovery-brief.md",
+    "docs/project/discovery/_TEMPLATE-first-slice-candidate.md",
+    "docs/project/runbooks/fill-handbook-stages-fresh.md",
+  ];
 
   return {
     header: `# Fill Handbook Prompts — ${project} ${version}
@@ -271,15 +293,25 @@ Read the files in this order before starting:
 5. this file: docs/project/runbooks/fill-prompts.md
 
 Then work through the stages below in order.
+
+${isFresh ? "This is a **fresh-mode** prompt set. It is discovery-first. Do not fill the whole handbook before there is enough to start." : ""}
+
+If this is a fresh / near-empty project, also read:
+${isFresh ? freshStageFiles.map((f) => "- " + f).join("\n") + "\n" : ""}
 `,
     meta: {
       projectName: project,
       handbookVersion: version,
       snapshotDate: date,
       projectTypeHint,
+      bootstrapMode: ctx.miningPackage?.bootstrapMode || null,
+      isFresh,
       existingDocCount: pkg.existingDocCount,
       artifactCounts: pkg.artifactCounts,
-      note: "These prompts assume the handbook skeleton already exists. If it does not, run bootstrap first.",
+      note: isFresh
+        ? "Use the fresh-mode staged prompts for discovery first."
+        : "These prompts assume the handbook skeleton already exists. If it does not, run bootstrap first.",
+      freshStageFiles: isFresh ? freshStageFiles : null,
     },
     stages: [
       {
