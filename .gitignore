@@ -1,0 +1,25 @@
+# Local / machine-specific
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.env
+.env.*
+!.env.example
+
+# Build / generated artifacts (if any appear later)
+node_modules/
+dist/
+build/
+target/
+*.class
+*.pyc
+__pycache__/
+
+# IDE workspace files (optional)
+.idea/
+.vscode/
+*.sublime-workspace
+
+# OS snapshot garbage
+ehthumbs.db
