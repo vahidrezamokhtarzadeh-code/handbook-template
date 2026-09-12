@@ -17,10 +17,71 @@ A decision record that says only *what* was chosen is incomplete — future main
 
 ## How to use
 
-1. Copy this directory into your project root (contents up to the root, or keep as `handbook/`).
-2. Copy `agents.md` to the repository root as `AGENTS.md` — it is the compressed entry point agents read first.
-3. Replace placeholders: `<Project Name>`, `<...>` markers, and version numbers.
-4. Fill in this order (the production flow):
+This template is meant to be bootstrapped into a real project, then filled by an AI agent.
+The hand-editing steps below are now the review step, not the primary creation flow.
+
+### 1. Bootstrap into a target project
+
+```bash
+# From inside the target project, or point --target at it:
+node /path/to/handbook-template/bootstrap-handbook.mjs "MyProject"
+
+# Or explicitly:
+node bootstrap-handbook.mjs --project "MyProject" --target /path/to/my-project
+```
+
+The script copies the handbook template into the target project, promotes `agents.md` to
+`AGENTS.md`, stamps the project name/version/date, and generates the initial core files plus
+a mining package and a fill plan.
+
+Modes:
+- `--existing` — existing project, mid-development (**implemented**).
+- `--fresh` — fresh / new / near-empty project (**implemented**).
+- `--new` — deprecated; use `--fresh` instead.
+
+Run `node bootstrap-handbook.mjs --help` for all options.
+
+### 2. Let an agent fill the handbook
+
+After bootstrap, an AI agent (for example Freebuff) fills the handbook from staged prompts.
+The fill pipeline is prompt generation only; it does not call an LLM.
+
+```bash
+# From the repository root of the bootstrapped project:
+node docs/project/runbooks/fill-handbook-pipeline.mjs
+```
+
+This writes:
+
+- `docs/project/runbooks/fill-prompts.json`
+- `docs/project/runbooks/fill-prompts.md`
+- `docs/project/runbooks/fill-summary.md`
+
+Then the agent follows the staged prompts in
+`docs/project/runbooks/fill-handbook-stages.md`.
+
+The pipeline reads the mining package and fill plan that bootstrap produced, plus the existing
+handbook state, and assembles staged prompts that are honest by default: inferred content stays
+`Candidate` / `Needs-confirmation` unless there is real evidence.
+
+The fill plan (`docs/project/runbooks/handbook-fill-plan.md`) is the reviewable summary of what
+the agent should do and what still needs a human.
+
+### 3. Review and correct
+
+After the agent fills the handbook:
+
+- Read `docs/PROJECT-COMPASS.md` and correct any inaccurate synthesis.
+- Read `docs/LATEST-STATE.md` and replace placeholder-only sections with real content.
+- Read `docs/DECISION-TRACE.md` and add only evidence-backed rows.
+- Read `docs/PROJECT-NARRATIVE.md` and add real "why" sections.
+- Read `docs/START-HERE.md` and set the current phase, next action, and project-specific rules.
+- After any later change, update the affected docs and indexes (see `AGENTS.md`).
+
+### Production flow (for the content itself)
+
+Once the skeleton exists and an agent can draft it, the real handbook grows by capturing
+evidence first and decisions immediately:
 
 **Phase A — Discovery (evidence first)**
 1. `project/stories/` — write each real use-case as a Story as it emerges.
@@ -47,44 +108,9 @@ A decision record that says only *what* was chosen is incomplete — future main
 - A Story is **evidence, never a universal template**, until a separate ADR explicitly generalizes it.
 - Index/coverage maps (`DECISION-INDEX.md`, `CONTEXT-COVERAGE.md`, `EXECUTABLE-DESIGN-INDEX.md`) keep the whole tree navigable.
 
-## Automation
-
-### Bootstrap
-
-Bootstrap the handbook into a project automatically:
-
-```bash
-# from inside the target project:
-node /path/to/handbook-template/bootstrap-handbook.mjs "MyProject"
-
-# or explicitly:
-node bootstrap-handbook.mjs --project "MyProject" --target /path/to/my-project
-```
-
-The script copies the template in, promotes `agents.md` to `AGENTS.md`, stamps the project name and version, and generates:
-
-- `docs/START-HERE.md`, `docs/LATEST-STATE.md`, `docs/PROJECT-NARRATIVE.md`, `docs/DECISION-TRACE.md`,
-  `docs/CONTEXT-COVERAGE.md`, `docs/EXECUTABLE-DESIGN-INDEX.md`, `docs/SOURCE-HANDOFF.md`,
-  `docs/CHANGELOG.md`
-- `docs/PROJECT-COMPASS.md` (short orientation synthesis)
-- `docs/project/runbooks/mining-package.json`
-- `docs/project/runbooks/handbook-fill-plan.md`
-
-The script is project-agnostic and does not call an LLM. It infers project name, version, and snapshot
-date where it can (from `package.json`, git, or an existing changelog), and it records a pre-flight
-summary of what it detected.
-
-Modes:
-- `--existing` — existing project, mid-development (**implemented**).
-- `--fresh` — fresh/new/near-empty project (**implemented**).
-- `--new` — deprecated; use `--fresh` instead.
-
-Run `node bootstrap-handbook.mjs --help` for all options.
-
 ## Repository
 
-- Repository root: this file
-- Template entrypoint: `bootstrap-handbook.mjs`
+- Repository root: `README.md` (this file) and `bootstrap-handbook.mjs`
 - Template guide: `docs/README.md` (what you are reading)
 - Handbook living copy: `docs/` (copied into a target project by bootstrap)
 
@@ -94,29 +120,6 @@ Run `node bootstrap-handbook.mjs --help` for all options.
 - `agents.md` — template for the repository root `AGENTS.md`
 - `docs/` — the handbook template that gets copied into a target project
 - `docs/project/runbooks/` — fill pipeline, staged prompts, mining package, and fill plan
-
-
-### Filling the handbook
-
-After bootstrap, an AI agent (for example Freebuff) fills the handbook using staged prompts.
-The fill pipeline is prompt generation only; it does not call an LLM.
-
-```bash
-# from the repository root:
-node docs/project/runbooks/fill-handbook-pipeline.mjs
-```
-
-This writes:
-
-- `docs/project/runbooks/fill-prompts.json`
-- `docs/project/runbooks/fill-prompts.md`
-- `docs/project/runbooks/fill-summary.md`
-
-Then the agent follows the staged prompts in `docs/project/runbooks/fill-handbook-stages.md`.
-
-The fill pipeline reads the mining package and fill plan that bootstrap produced, plus the existing
-handbook state, and assembles staged prompts that are honest by default: inferred content stays
-Candidate/Needs-confirmation unless there is real evidence.
 
 ## Pruning for small projects
 
