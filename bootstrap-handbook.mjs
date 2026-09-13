@@ -1,26 +1,29 @@
 #!/usr/bin/env node
 /**
- * Bootstrap the Architecture Handbook into a project.
+ * Bootstrap the Architecture Handbook for a project.
  *
- * Copies the handbook template next to this script into a target project,
- * promotes agents.md -> AGENTS.md, stamps the project name/version, and
- * generates bootstrapped core files (LATEST-STATE, DECISION-TRACE,
- * PROJECT-NARRATIVE, START-HERE, CHANGELOG).
+ * Usage model:
+ *   1. cd into the project you want to study.
+ *   2. Run this script with --target pointing at the folder where the handbook
+ *      should be written.
+ *   3. The script inspects the current working directory and writes the handbook
+ *      into --target.
+ *
+ * This keeps the inspected project and the handbook output separate when you want
+ * documentation to live outside the source tree.
  *
  * Modes:
  *   --existing  project already created, mid-development (IMPLEMENTED)
- *   --new       brand-new project, start from scratch (not implemented yet)
- *
- * Usage:
- *   node bootstrap-handbook.mjs <project-name> [options]
- *   node bootstrap-handbook.mjs --project <name> [options]
+ *   --fresh     new / near-empty project, discovery-first (IMPLEMENTED)
  *
  * Options:
- *   --target <dir>   Project root to bootstrap into (default: current directory)
+ *   --target <dir>   REQUIRED. Folder where the handbook should be written.
+ *   --project <name> Project name for the handbook (default: inferred from CWD).
  *   --existing       Existing project, mid-development (default)
- *   --new            New project from scratch (not implemented yet)
- *   --version <ver>  Handbook version for this snapshot (default: v0.1.0)
- *   --force          Proceed even if AGENTS.md / START-HERE.md already exist
+ *   --fresh          Fresh/new/near-empty project (discovery-first)
+ *   --version <ver>  Handbook version for this snapshot (default: inferred or v0.1.0)
+ *   --date <date>    Handbook snapshot date YYYY-MM-DD (default: inferred or today)
+ *   --force          Proceed even if AGENTS.md / START-HERE.md already exist in target
  *   --help           Show this help
  */
 import fs from "node:fs";
@@ -38,7 +41,7 @@ const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
 function parseArgs(argv) {
   const args = {
     project: null,
-    target: process.cwd(),
+    target: null,
     mode: "existing",
     version: null,
     date: null,
@@ -53,7 +56,7 @@ function parseArgs(argv) {
         args.project = argv[++i] ?? null;
         break;
       case "--target":
-        args.target = argv[++i] ?? process.cwd();
+        args.target = argv[++i] ?? null;
         break;
       case "--version":
         args.version = argv[++i] ?? "v0.1.0";
@@ -85,20 +88,26 @@ function parseArgs(argv) {
   }
   return args;
 }  function printUsage() {
-  console.log(`Bootstrap the Architecture Handbook into a project.
+  console.log(`Bootstrap the Architecture Handbook for a project.
 
 Usage:
-  node ${SCRIPT_NAME} <project-name> [options]
-  node ${SCRIPT_NAME} --project <name> [options]
+  cd <project-to-study>
+  node ${SCRIPT_NAME} --target <handbook-output-dir> [options]
 
 Options:
-  --target <dir>   Project root to bootstrap into (default: current directory)
-  --existing       Existing project, mid-development (default; implemented)
-  --fresh          Fresh/new/near-empty project (implemented)
-  --version <ver>  Handbook version for this snapshot (default: inferred or v0.1.0)
-  --date <date>    Handbook snapshot date YYYY-MM-DD (default: inferred or today)
-  --force          Proceed even if AGENTS.md / START-HERE.md already exist
-  --help           Show this help`);
+  --target <dir>      REQUIRED. Folder where the handbook should be written.
+  --project <name>    Project name for the handbook (default: inferred from CWD).
+  --existing          Existing project, mid-development (default; implemented).
+  --fresh             Fresh/new/near-empty project, discovery-first (implemented).
+  --version <ver>     Handbook version for this snapshot (default: inferred or v0.1.0).
+  --date <date>       Handbook snapshot date YYYY-MM-DD (default: inferred or today).
+  --force             Proceed even if AGENTS.md / START-HERE.md already exist in target.
+  --help              Show this help
+
+Notes:
+  --target must differ from both the template directory and the project you are
+  studying. The script inspects the current working directory and writes the
+  handbook into --target.`);
   }
 
 // ---------------------------------------------------------------------------
@@ -187,55 +196,55 @@ function inferProjectName(target) {
 }
 
 /**
- * Infer a handbook version from the target tree, in this order:
+ * Infer a handbook version from the inspected project tree, in this order:
  *   1. --version (explicit)
- *   2. package.json "version"
- *   3. first entry in an existing docs/CHANGELOG.md
+ *   2. package.json "version" in the inspected project
+ *   3. first entry in an existing docs/CHANGELOG.md in the inspected project
  *   4. default "v0.1.0"
  *
  * Returns { value, source }.
  */
 function resolveVersion(args) {
   const trimmed = (s) => (s || "").trim();
+  const inspectedProject = args.target;
 
   if (args.version !== null && trimmed(args.version)) {
     return { value: trimmed(args.version), source: "--version" };
   }
 
   try {
-    const pkgPath = path.join(args.target, "package.json");
+    const pkgPath = path.join(inspectedProject, "package.json");
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
       const v = trimmed(pkg.version);
-      if (v) return { value: "v" + v, source: "package.json version" };
+      if (v) return { value: "v" + v, source: "package.json version in inspected project" };
     }
   } catch {}
 
   try {
-    const changelogPath = path.join(args.target, "docs", "CHANGELOG.md");
+    const changelogPath = path.join(inspectedProject, "docs", "CHANGELOG.md");
     if (fs.existsSync(changelogPath)) {
       const text = fs.readFileSync(changelogPath, "utf8");
       // Grab the version token from the first entry heading, e.g. "## v0.7.3 — 2026-09-12".
       const match = text.match(/^##\s+([^\s—-]+)/m);
       if (match && trimmed(match[1])) {
-        return { value: trimmed(match[1]), source: "docs/CHANGELOG.md latest entry" };
+        return { value: trimmed(match[1]), source: "docs/CHANGELOG.md latest entry in inspected project" };
       }
     }
   } catch {}
 
   return { value: "v0.1.0", source: "default" };
-}
-
-/**
- * Infer a snapshot date from the target tree, in this order:
+}/**
+ * Infer a snapshot date from the inspected project tree, in this order:
  *   1. --date
- *   2. date of the latest docs/CHANGELOG.md entry
+ *   2. date of the latest docs/CHANGELOG.md entry in the inspected project
  *   3. today
  *
  * Returns { value, source }.
  */
 function resolveDate(args) {
   const trimmed = (s) => (s || "").trim();
+  const inspectedProject = args.target;
 
   if (trimmed(args.date)) {
     // Accept bare YYYY-MM-DD; normalise to ISO date.
@@ -249,7 +258,7 @@ function resolveDate(args) {
   }
 
   try {
-    const changelogPath = path.join(args.target, "docs", "CHANGELOG.md");
+    const changelogPath = path.join(inspectedProject, "docs", "CHANGELOG.md");
     if (fs.existsSync(changelogPath)) {
       const text = fs.readFileSync(changelogPath, "utf8");
       const sep = String.fromCharCode(0x2014); // em dash
@@ -258,9 +267,10 @@ function resolveDate(args) {
       const reSrc =
         "^##" + spaceClass + "+([^/" + spaceClass + sep + "-]+" + spaceClass + "+[" + sep + "-" + spaceClass + "+([^/" + nlClass + "+";
       const match = text.match(new RegExp(reSrc, "m"));
+
       if (match && trimmed(match[2])) {
         const d = new Date(trimmed(match[2]));
-        if (!isNaN(d.getTime())) return { value: d.toISOString().slice(0, 10), source: "docs/CHANGELOG.md latest entry date" };
+        if (!isNaN(d.getTime())) return { value: d.toISOString().slice(0, 10), source: "docs/CHANGELOG.md latest entry date in inspected project" };
       }
     }
   } catch {}
@@ -700,6 +710,8 @@ function writeMiningPackage(target, project, version, date, inspection, mode) {
     },
     projectTypeHint: inspection.seemsBookProject ? "possible-book-project" : inspection.seemsCodeRepo ? "likely-code-project" : "unrecognized",
     bootstrapMode: mode,
+    inspectedProjectRoot: path.resolve(process.cwd()),
+    handbookTargetRoot: path.resolve(target),
   };
   return pkg;
 }
@@ -935,36 +947,38 @@ function copyTemplateIfFresh(source, target) {
 
 function bootstrapExisting(args) {
   const source = path.resolve(SCRIPT_DIR);
+  const cwd = process.cwd();
   const target = path.resolve(args.target);
 
-  const errors = validateTarget(source, target);
+  const errors = validateTarget(source, cwd, target);
   if (errors) {
     console.error(errors);
     process.exit(1);
   }
 
-  // Inspect the target *before* copying, so the preflight reports the real pre-bootstrap state.
-  const preInspection = inspectTarget(target);
-  printPreflight(args.project, args.version, args.date, args.mode, preInspection);
+  // Inspect the current working directory, because that is the project under study.
+  const preInspection = inspectTarget(cwd);
+  printPreflight(args.project, args.version, args.date, args.mode, cwd, target, preInspection);
 
   const conflict = ["AGENTS.md", "docs/START-HERE.md"].find((f) => fs.existsSync(path.join(target, f)));
   if (conflict && !args.force) {
     console.error(
-      `"${conflict}" already exists in ${target} — this project looks already bootstrapped.\n` +
+      `"${conflict}" already exists in ${target} — this target looks already bootstrapped.\n` +
         `Re-run with --force to overwrite the core files (other files are re-copied too).`
     );
     process.exit(1);
   }
 
-  copyTemplateIfFresh(source, target);
+  copyTemplate(source, target);
   ensureAgentsMd(source, target);
   stampTarget(target, args.project, args.version, args.date);
   generateCoreFilesFor(target, args.project, args.version, args.date, args.mode);
   writeOrientationStub(target, args.project, args.version);
 
-  // Re-inspect after copy so the mining package reflects the actual tree the agent will see.
-  // For project-type detection, exclude the handbook tree so the template does not contaminate the result.
-  const postInspection = inspectTarget(target, { excludeHandbook: true });
+  // Re-inspect the inspected project after copy so the mining package reflects
+  // the tree the agent will actually study. Exclude the handbook tree so the
+  // template does not contaminate project-type detection.
+  const postInspection = inspectTarget(cwd, { excludeHandbook: true });
   const pkg = writeMiningPackage(target, args.project, args.version, args.date, postInspection, args.mode);
   fs.mkdirSync(path.dirname(miningPackagePath(target)), { recursive: true });
   fs.writeFileSync(miningPackagePath(target), JSON.stringify(pkg, null, 2) + "\n", "utf8");
@@ -973,24 +987,25 @@ function bootstrapExisting(args) {
   fs.mkdirSync(path.join(target, "docs", "project", "runbooks"), { recursive: true });
   fs.writeFileSync(path.join(target, "docs", "project", "runbooks", "handbook-fill-plan.md"), planText, "utf8");
 
-  printCreated(args.project, args.version, args.date);
-  printAgentNextSteps(args.project);
+  printCreated(target, args.project, args.version, args.date);
+  printAgentNextSteps(args.project, target);
   printReviewNotes(args.project);
 }
 
 function bootstrapFresh(args) {
   const source = path.resolve(SCRIPT_DIR);
+  const cwd = process.cwd();
   const target = path.resolve(args.target);
 
-  const errors = validateTarget(source, target);
+  const errors = validateTarget(source, cwd, target);
   if (errors) {
     console.error(errors);
     process.exit(1);
   }
 
-  // Inspect the target *before* copying so the preflight reports the real pre-bootstrap state.
-  const preInspection = inspectTarget(target);
-  printPreflight(args.project, args.version, args.date, args.mode, preInspection);
+  // In fresh mode the inspected tree is still the current working directory.
+  const preInspection = inspectTarget(cwd);
+  printPreflight(args.project, args.version, args.date, args.mode, cwd, target, preInspection);
 
   const freshConflict = ["AGENTS.md", "docs/START-HERE.md"].find((f) => fs.existsSync(path.join(target, f)));
   if (freshConflict && !args.force) {
@@ -1010,9 +1025,10 @@ function bootstrapFresh(args) {
   writeOrientationStub(target, args.project, args.version);
   if (args.mode === "fresh") ensureDiscoveryFolder(target);
 
-  // Re-inspect after copy so the mining package reflects the actual tree the agent will see.
-  // For project-type detection, exclude the handbook tree so the template does not contaminate the result.
-  const postInspection = inspectTarget(target, { excludeHandbook: true });
+  // Re-inspect the inspected project after copy so the mining package reflects
+  // the tree the agent will actually study. Exclude the handbook tree so the
+  // template does not contaminate project-type detection.
+  const postInspection = inspectTarget(cwd, { excludeHandbook: true });
   const pkg = writeMiningPackage(target, args.project, args.version, args.date, postInspection, args.mode);
   fs.mkdirSync(path.dirname(miningPackagePath(target)), { recursive: true });
   fs.writeFileSync(miningPackagePath(target), JSON.stringify(pkg, null, 2) + "\n", "utf8");
@@ -1021,9 +1037,9 @@ function bootstrapFresh(args) {
   fs.mkdirSync(path.join(target, "docs", "project", "runbooks"), { recursive: true });
   fs.writeFileSync(path.join(target, "docs", "project", "runbooks", "handbook-fill-plan.md"), planText, "utf8");
 
-  printCreated(args.project, args.version, args.date);
-  printAgentNextSteps(args.project);
-  printFreshReviewNotes(args.project);
+  printCreated(target, args.project, args.version, args.date);
+  printAgentNextSteps(args.project, target);
+  printFreshReviewNotes(args.project, target);
 }
 
 function ensureDiscoveryFolder(target) {
@@ -1037,31 +1053,39 @@ function ensureDiscoveryFolder(target) {
   // This function is defensive: it ensures the folder exists if the copy did not create it.
 }
 
-function validateTarget(source, target) {
-  if (target === source) {
+function validateTarget(source, inspectedProject, handbookTarget) {
+  const resolvedSource = path.resolve(source);
+  const resolvedInspectedProject = path.resolve(inspectedProject);
+  const resolvedHandbookTarget = path.resolve(handbookTarget);
+
+  // The handbook must not be written back into the template directory.
+  if (resolvedHandbookTarget === resolvedSource) {
     return `Target must differ from the template directory itself: ${source}`;
   }
-  const relTarget = path.relative(source, target);
-  const targetInsideSource =
-    relTarget !== "" && !relTarget.startsWith("..") && !path.isAbsolute(relTarget);
-  const relSource = path.relative(target, source);
-  const sourceInsideTarget =
-    relSource !== "" && !relSource.startsWith("..") && !path.isAbsolute(relSource);
-  if (targetInsideSource || sourceInsideTarget) {
-    return (
-      `Target must not contain the template directory or be inside it.\n` +
-        `  template: ${source}\n  target:   ${target}`
-    );
+  if (!fs.existsSync(handbookTarget) || !fs.statSync(handbookTarget).isDirectory()) {
+    return `Target directory does not exist: ${handbookTarget}`;
   }
-  if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
-    return `Target directory does not exist: ${target}`;
+  // The inspected project tree is the current working directory.
+  if (resolvedInspectedProject === resolvedHandbookTarget) {
+    return `Target must differ from the inspected project directory: ${resolvedInspectedProject}`;
+  }
+  // Do not allow bootstrapping when the inspected project is the template itself.
+  if (resolvedInspectedProject === resolvedSource) {
+    return (`
+      The current working directory is the template directory itself (${resolvedSource}).\n` +
+      `  Move into the project you want to study and re-run from there.\n` +
+      `  Then use --target to choose where the handbook should be written.\n`
+    );
   }
   return null;
 }
 
-function printPreflight(project, version, date, mode, inspection) {
+function printPreflight(project, version, date, mode, inspectedProject, handbookTarget, inspection) {
   console.log(`
-Bootstrapping Architecture Handbook for "${project}" (${version}) into ${path.resolve(inspection && inspection.targetRoot ? inspection.targetRoot : process.cwd())}
+Bootstrapping Architecture Handbook for "${project}" (${version})
+
+Inspected project: ${path.resolve(inspectedProject)}
+Target (handbook output): ${path.resolve(handbookTarget)}
 
 Mode: ${mode === "fresh" ? "fresh / start-from-scratch" : "existing project"}
 Snapshot date: ${date}
@@ -1071,8 +1095,9 @@ ${inspectionSummary(inspection)}
 `);
 }
 
-function printCreated(project, version, date) {
-  console.log("Created / updated:");
+function printCreated(target, project, version, date) {
+  console.log("Created / updated into:");
+  console.log(`  ${target}`);
   console.log("  AGENTS.md");
   console.log("  docs/PROJECT-COMPASS.md");
   console.log("  docs/START-HERE.md, docs/LATEST-STATE.md, docs/PROJECT-NARRATIVE.md,");
@@ -1083,17 +1108,17 @@ function printCreated(project, version, date) {
   console.log("  docs/project/..., docs/architect-journal/... (template skeletons)");
 }
 
-function printAgentNextSteps(project) {
+function printAgentNextSteps(project, target) {
   console.log(`
 To fill the handbook, an AI agent (e.g. Freebuff) should now read:
 
-  1. docs/PROJECT-COMPASS.md
-  2. docs/START-HERE.md
-  3. docs/project/runbooks/handbook-fill-plan.md
-  4. docs/project/runbooks/mining-package.json
+  1. ${target}/docs/PROJECT-COMPASS.md
+  2. ${target}/docs/START-HERE.md
+  3. ${target}/docs/project/runbooks/handbook-fill-plan.md
+  4. ${target}/docs/project/runbooks/mining-package.json
 
 Then follow the staged prompts in:
-  docs/project/runbooks/fill-handbook-stages.md
+  ${target}/docs/project/runbooks/fill-handbook-stages.md
 
 The agent should not invent Accepted decisions. Inferred content stays Candidate/Needs-confirmation unless there is real evidence.
 `);
@@ -1111,12 +1136,12 @@ Human review checklist:
 `);
 }
 
-function printFreshReviewNotes(project) {
+function printFreshReviewNotes(project, target) {
   console.log(`
 Human review checklist (fresh/near-empty project):
-  1. Define what this project is for and write it into docs/PROJECT-COMPASS.md and docs/LATEST-STATE.md.
-  2. Decide the first slice and put the next action into docs/START-HERE.md.
-  3. After the first real decisions exist, fill docs/DECISION-TRACE.md and docs/PROJECT-NARRATIVE.md.
+  1. Define what this project is for and write it into ${target}/docs/PROJECT-COMPASS.md and ${target}/docs/LATEST-STATE.md.
+  2. Decide the first slice and put the next action into ${target}/docs/START-HERE.md.
+  3. After the first real decisions exist, fill ${target}/docs/DECISION-TRACE.md and ${target}/docs/PROJECT-NARRATIVE.md.
   4. After any later change, update the affected docs and indexes (see AGENTS.md).
 `);
 }
@@ -1127,8 +1152,21 @@ function main() {
     printUsage();
     process.exit(0);
   }
+  if (!args.target) {
+    console.error("--target is required. It must point to the folder where the handbook should be written.\n");
+    printUsage();
+    process.exit(1);
+  }
+  const source = path.resolve(SCRIPT_DIR);
+  const cwd = process.cwd();
+  const target = path.resolve(args.target);
+  const errors = validateTarget(source, cwd, target);
+  if (errors) {
+    console.error(errors);
+    process.exit(1);
+  }
   if (!args.project) {
-    const inferred = inferProjectName(args.target);
+    const inferred = inferProjectName(cwd);
     if (inferred) {
       args.project = inferred;
       console.log(`Inferred project name: ${args.project}`);
@@ -1151,8 +1189,7 @@ function main() {
     );
     process.exit(1);
   }
-  if (args.mode === "existing") bootstrapExisting(args);
-  else if (args.mode === "fresh") bootstrapFresh(args);
+  if (args.mode === "fresh") bootstrapFresh(args);
   else bootstrapExisting(args);
 }
 
